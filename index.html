@@ -6,7 +6,7 @@
     <title>醫療融資分析計算器</title>
     <!-- 引入 Chart.js 用於圖表 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- 引入 SheetJS 用於解析 supreme.xlsx -->
+    <!-- 引入 SheetJS 用於解析 supreme.xlsx 及 flexi.xlsx -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     
     <style>
@@ -48,7 +48,7 @@
             border: 1px solid var(--border-color);
         }
 
-        /* 數據源狀態欄（已隱藏） */
+        /* 數據源狀態欄（隱藏） */
         .db-status-bar {
             display: none;
         }
@@ -193,10 +193,10 @@
         <!-- 資料庫連結狀態欄 (隱藏) -->
         <div class="db-status-bar">
             <div>
-                數據源狀態：<span id="dbStatus">未連結 supreme.xlsx</span>
+                數據源狀態：<span id="dbStatus">未連結 Excel 數據源</span>
             </div>
             <div>
-                <input type="file" id="excelUpload" accept=".xlsx, .xls">
+                <input type="file" id="excelUpload" accept=".xlsx, .xls" multiple>
             </div>
         </div>
 
@@ -204,25 +204,19 @@
         <span class="section-label">保障計劃 (Plan)</span>
         <select id="mainPlanSelect" class="select-input">
             <option value="supreme" selected>宏利晉悅自願醫保靈活計劃</option>
-            <option value="fullcare">宏利全護航自願醫保靈活計劃</option>
+            <option value="flexi">宏利全護航自願醫保靈活計劃</option>
         </select>
 
         <!-- 計劃級別 (Level) -->
-        <span class="section-label">計劃級別 (Level)</span>
+        <span class="section-label" id="levelTitle">計劃級別 (Level)</span>
         <div class="button-group" id="planGroup">
-            <button type="button" class="btn-option active" data-value="smart">智選計劃 (Smart)</button>
-            <button type="button" class="btn-option" data-value="advance">精選計劃 (Advance)</button>
-            <button type="button" class="btn-option" data-value="deluxe">優選計劃 (Deluxe)</button>
+            <!-- 動態生成按鈕 -->
         </div>
 
-        <!-- 自付額選項 (Deductible) -->
-        <span class="section-label">自付額選項 (Deductible)</span>
+        <!-- 自付額選項 / 額外醫療保障 -->
+        <span class="section-label" id="deductibleTitle">自付額選項 (Deductible)</span>
         <div class="button-group" id="deductibleGroup">
-            <button type="button" class="btn-option active" data-value="0">$0</button>
-            <button type="button" class="btn-option" data-value="8000" id="btnDed8000" style="display: none;">$8,000</button>
-            <button type="button" class="btn-option" data-value="22800">$22,800</button>
-            <button type="button" class="btn-option" data-value="45000">$45,000</button>
-            <button type="button" class="btn-option" data-value="100000">$100,000</button>
+            <!-- 動態生成按鈕 -->
         </div>
 
         <!-- 控制器 -->
@@ -312,96 +306,186 @@
     <script>
         let selectedMainPlan = 'supreme';
         let selectedPlanLevel = 'smart';
-        let selectedDeductible = 0;
+        let selectedDeductible = '0';
         let chartInstance = null;
-        let excelDatabase = null;
 
-        async function tryAutoLoadExcel() {
+        // 獨立資料庫：晉悅 (supreme) 與 全護航 (flexi)
+        let databases = {
+            supreme: null,
+            flexi: null
+        };
+
+        // 自動嘗試載入同目錄下的 supreme.xlsx 與 flexi.xlsx
+        async function tryAutoLoadExcels() {
             try {
-                const response = await fetch('supreme.xlsx');
-                if (response.ok) {
-                    const arrayBuffer = await response.arrayBuffer();
-                    processExcelData(arrayBuffer);
+                const resSupreme = await fetch('supreme.xlsx');
+                if (resSupreme.ok) {
+                    const buffer = await resSupreme.arrayBuffer();
+                    databases.supreme = parseExcelBuffer(buffer);
                 }
-            } catch (e) {
-                console.log("未檢測到同目錄下的 supreme.xlsx");
-            }
-        }
+            } catch (e) { console.log("未檢測到 supreme.xlsx"); }
 
-        function processExcelData(buffer) {
-            const workbook = XLSX.read(buffer, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            
-            excelDatabase = XLSX.utils.sheet_to_json(worksheet);
+            try {
+                const resFlexi = await fetch('flexi.xlsx');
+                if (resFlexi.ok) {
+                    const buffer = await resFlexi.arrayBuffer();
+                    databases.flexi = parseExcelBuffer(buffer);
+                }
+            } catch (e) { console.log("未檢測到 flexi.xlsx"); }
+
             calculate();
         }
 
+        function parseExcelBuffer(buffer) {
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            return XLSX.utils.sheet_to_json(worksheet);
+        }
+
+        // 手動檔案上傳監聽
         const excelUploadEl = document.getElementById('excelUpload');
         if (excelUploadEl) {
             excelUploadEl.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (!file) return;
+                const files = e.target.files;
+                if (!files || files.length === 0) return;
 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    processExcelData(e.target.result);
-                };
-                reader.readAsArrayBuffer(file);
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        const parsedData = parseExcelBuffer(evt.target.result);
+                        const fileName = file.name.toLowerCase();
+                        if (fileName.includes('flexi')) databases.flexi = parsedData;
+                        else databases.supreme = parsedData;
+                        calculate();
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            });
+        }
+
+        // 渲染按鈕介面（根據主保障計劃動態改變選項內容與文字）
+        function renderPlanAndDeductibleUI() {
+            const planContainer = document.getElementById('planGroup');
+            const deductibleContainer = document.getElementById('deductibleGroup');
+            const levelTitle = document.getElementById('levelTitle');
+            const deductibleTitle = document.getElementById('deductibleTitle');
+
+            if (selectedMainPlan === 'supreme') {
+                // 宏利晉悅
+                levelTitle.innerText = "計劃級別 (Level)";
+                deductibleTitle.innerText = "自付額選項 (Deductible)";
+
+                const levels = [
+                    { label: '智選計劃 (Smart)', value: 'smart' },
+                    { label: '精選計劃 (Advance)', value: 'advance' },
+                    { label: '優選計劃 (Deluxe)', value: 'deluxe' }
+                ];
+
+                planContainer.innerHTML = levels.map(l => 
+                    `<button type="button" class="btn-option ${selectedPlanLevel === l.value ? 'active' : ''}" data-value="${l.value}">${l.label}</button>`
+                ).join('');
+
+                renderSupremeDeductibles();
+
+            } else if (selectedMainPlan === 'flexi') {
+                // 宏利全護航
+                levelTitle.innerText = "計劃級別 (Level)";
+                deductibleTitle.innerText = "額外醫療保障 (Supplementary medical benefit)";
+
+                const levels = [
+                    { label: '普通房 (Ward)', value: 'ward' },
+                    { label: '半私家房 (Semi-private Room)', value: 'semi-private' },
+                    { label: '私家房 (Private Room)', value: 'private' }
+                ];
+
+                planContainer.innerHTML = levels.map(l => 
+                    `<button type="button" class="btn-option ${selectedPlanLevel === l.value ? 'active' : ''}" data-value="${l.value}">${l.label}</button>`
+                ).join('');
+
+                const deductibles = [
+                    { label: '沒有額外醫療保障', value: 'none' },
+                    { label: '連同高額醫療保障', value: 'high' },
+                    { label: '連同特級高額醫療保障', value: 'super_high' }
+                ];
+
+                deductibleContainer.innerHTML = deductibles.map(d => 
+                    `<button type="button" class="btn-option ${selectedDeductible === d.value ? 'active' : ''}" data-value="${d.value}">${d.label}</button>`
+                ).join('');
+            }
+
+            bindButtonGroupEvents();
+        }
+
+        // 渲染晉悅自付額按鈕 (含 $8,000 隱藏邏輯)
+        function renderSupremeDeductibles() {
+            const deductibleContainer = document.getElementById('deductibleGroup');
+            let deductibles = [
+                { label: '$0', value: '0' },
+                { label: '$8,000', value: '8000' },
+                { label: '$22,800', value: '22800' },
+                { label: '$45,000', value: '45000' },
+                { label: '$100,000', value: '100000' }
+            ];
+
+            // 智選計劃 (Smart) 不支援 $8,000
+            if (selectedPlanLevel === 'smart') {
+                deductibles = deductibles.filter(d => d.value !== '8000');
+                if (selectedDeductible === '8000') selectedDeductible = '0';
+            }
+
+            deductibleContainer.innerHTML = deductibles.map(d => 
+                `<button type="button" class="btn-option ${selectedDeductible === d.value ? 'active' : ''}" data-value="${d.value}">${d.label}</button>`
+            ).join('');
+        }
+
+        // 事件綁定
+        function bindButtonGroupEvents() {
+            initButtonGroup('planGroup', val => { 
+                selectedPlanLevel = val; 
+                if (selectedMainPlan === 'supreme') renderSupremeDeductibles();
+                bindButtonGroupEvents();
+                calculate(); 
+            });
+
+            initButtonGroup('deductibleGroup', val => { 
+                selectedDeductible = val; 
+                calculate(); 
             });
         }
 
         function calculatePremium(age, mainPlan, level, deductible) {
-            if (mainPlan === 'supreme' && excelDatabase && excelDatabase.length > 0) {
-                const record = excelDatabase.find(row => 
+            const activeDb = databases[mainPlan];
+
+            if (activeDb && activeDb.length > 0) {
+                const record = activeDb.find(row => 
                     row.Age == age && 
                     row.Plan.toString().toLowerCase() === level.toLowerCase() && 
-                    row.Deductible == deductible
+                    row.Deductible.toString().toLowerCase() === deductible.toString().toLowerCase()
                 );
                 if (record && record.Premium) {
                     return parseFloat(record.Premium);
                 }
             }
 
+            // 備用演算法
             let base = 3500;
             if (age < 20) base = 2000 + age * 80;
             else if (age < 50) base = 3000 + (age - 20) * 350;
             else if (age < 70) base = 13500 + (age - 50) * 900;
             else base = 31500 + (age - 70) * 1500;
 
-            if (mainPlan === 'fullcare') base *= 1.15;
+            if (mainPlan === 'flexi') base *= 1.15;
 
-            if (level === 'smart') base *= 1.0;
-            else if (level === 'advance') base *= 1.25;
-            else if (level === 'deluxe') base *= 1.6;
+            if (level === 'advance' || level === 'semi-private') base *= 1.25;
+            else if (level === 'deluxe' || level === 'private') base *= 1.6;
 
-            // 自付額對應折扣係數
-            if (deductible === 8000) base *= 0.88;
-            else if (deductible === 22800) base *= 0.75;
-            else if (deductible === 45000) base *= 0.60;
-            else if (deductible === 100000) base *= 0.40;
+            if (deductible === '8000' || deductible === 'high') base *= 0.88;
+            else if (deductible === '22800' || deductible === 'super_high') base *= 0.75;
+            else if (deductible === '45000') base *= 0.60;
+            else if (deductible === '100000') base *= 0.40;
 
             return base;
-        }
-
-        function updateDeductibleVisibility(level) {
-            const btn8000 = document.getElementById('btnDed8000');
-            if (!btn8000) return;
-
-            if (level === 'advance' || level === 'deluxe') {
-                btn8000.style.display = 'inline-block';
-            } else {
-                btn8000.style.display = 'none';
-                // 如果目前剛好停留在 $8,000，重設回 $0
-                if (selectedDeductible === 8000) {
-                    selectedDeductible = 0;
-                    const buttons = document.querySelectorAll('#deductibleGroup .btn-option');
-                    buttons.forEach(b => {
-                        if (b.dataset.value === "0") b.classList.add('active');
-                        else b.classList.remove('active');
-                    });
-                }
-            }
         }
 
         function initButtonGroup(groupId, callback) {
@@ -531,28 +615,26 @@
             if (mainPlanSelect) {
                 mainPlanSelect.addEventListener('change', (e) => {
                     selectedMainPlan = e.target.value;
+                    // 重設預設選擇級別與自付額
+                    if (selectedMainPlan === 'supreme') {
+                        selectedPlanLevel = 'smart';
+                        selectedDeductible = '0';
+                    } else {
+                        selectedPlanLevel = 'ward';
+                        selectedDeductible = 'none';
+                    }
+                    renderPlanAndDeductibleUI();
                     calculate();
                 });
             }
-
-            initButtonGroup('planGroup', val => { 
-                selectedPlanLevel = val; 
-                updateDeductibleVisibility(val);
-                calculate(); 
-            });
-
-            initButtonGroup('deductibleGroup', val => { 
-                selectedDeductible = parseInt(val); 
-                calculate(); 
-            });
 
             ['currentAge', 'targetAge', 'inflation'].forEach(id => {
                 const input = document.getElementById(id);
                 if (input) input.addEventListener('input', () => { updateDisplay(id); calculate(); });
             });
 
-            updateDeductibleVisibility(selectedPlanLevel);
-            tryAutoLoadExcel();
+            renderPlanAndDeductibleUI();
+            tryAutoLoadExcels();
             calculate();
         });
     </script>

@@ -77,7 +77,7 @@
 
         .button-group {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 12px;
             margin-bottom: 20px;
         }
@@ -218,10 +218,11 @@
         <!-- 自付額選項 (Deductible) -->
         <span class="section-label">自付額選項 (Deductible)</span>
         <div class="button-group" id="deductibleGroup">
-            <button type="button" class="btn-option active" data-value="0">0</button>
-            <button type="button" class="btn-option" data-value="22800">22,800</button>
-            <button type="button" class="btn-option" data-value="45000">45,000</button>
-            <button type="button" class="btn-option" data-value="100000">100,000</button>
+            <button type="button" class="btn-option active" data-value="0">$0</button>
+            <button type="button" class="btn-option" data-value="8000" id="btnDed8000" style="display: none;">$8,000</button>
+            <button type="button" class="btn-option" data-value="22800">$22,800</button>
+            <button type="button" class="btn-option" data-value="45000">$45,000</button>
+            <button type="button" class="btn-option" data-value="100000">$100,000</button>
         </div>
 
         <!-- 控制器 -->
@@ -374,11 +375,33 @@
             else if (level === 'advance') base *= 1.25;
             else if (level === 'deluxe') base *= 1.6;
 
-            if (deductible === 22800) base *= 0.75;
+            // 自付額對應折扣係數
+            if (deductible === 8000) base *= 0.88;
+            else if (deductible === 22800) base *= 0.75;
             else if (deductible === 45000) base *= 0.60;
             else if (deductible === 100000) base *= 0.40;
 
             return base;
+        }
+
+        function updateDeductibleVisibility(level) {
+            const btn8000 = document.getElementById('btnDed8000');
+            if (!btn8000) return;
+
+            if (level === 'advance' || level === 'deluxe') {
+                btn8000.style.display = 'inline-block';
+            } else {
+                btn8000.style.display = 'none';
+                // 如果目前剛好停留在 $8,000，重設回 $0
+                if (selectedDeductible === 8000) {
+                    selectedDeductible = 0;
+                    const buttons = document.querySelectorAll('#deductibleGroup .btn-option');
+                    buttons.forEach(b => {
+                        if (b.dataset.value === "0") b.classList.add('active');
+                        else b.classList.remove('active');
+                    });
+                }
+            }
         }
 
         function initButtonGroup(groupId, callback) {
@@ -512,14 +535,23 @@
                 });
             }
 
-            initButtonGroup('planGroup', val => { selectedPlanLevel = val; calculate(); });
-            initButtonGroup('deductibleGroup', val => { selectedDeductible = parseInt(val); calculate(); });
+            initButtonGroup('planGroup', val => { 
+                selectedPlanLevel = val; 
+                updateDeductibleVisibility(val);
+                calculate(); 
+            });
+
+            initButtonGroup('deductibleGroup', val => { 
+                selectedDeductible = parseInt(val); 
+                calculate(); 
+            });
 
             ['currentAge', 'targetAge', 'inflation'].forEach(id => {
                 const input = document.getElementById(id);
                 if (input) input.addEventListener('input', () => { updateDisplay(id); calculate(); });
             });
 
+            updateDeductibleVisibility(selectedPlanLevel);
             tryAutoLoadExcel();
             calculate();
         });

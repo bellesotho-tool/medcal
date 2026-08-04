@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>醫療融資分析計算器</title>
+    <!-- 引入 Chart.js 用於圖表 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 引入 SheetJS 用於解析 supreme.xlsx -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #10b981;
+            --primary-dark: #059669;
+            --primary-light: #ecfdf5;
+            --bg-body: #f4f6f8;
+            --card-bg: #ffffff;
+            --border-color: #e5e7eb;
+            --text-dark: #1f2937;
+            --text-muted: #6b7280;
+            --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            --radius-lg: 16px;
+            --radius-md: 10px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-dark); padding: 24px; max-width: 1280px; margin: 0 auto; }
+
+        .header-title {
+            background-color: var(--primary-dark);
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            border-radius: var(--radius-lg);
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .db-status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f3f4f6;
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-tag {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status-tag.online { background-color: #d1fae5; color: #065f46; }
+        .status-tag.offline { background-color: #fee2e2; color: #991b1b; }
+
+        .section-label { font-size: 0.95rem; font-weight: 700; color: var(--text-dark); margin-bottom: 10px; display: block; }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-option {
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 14px 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            user-select: none;
+        }
+
+        .btn-option:hover { background-color: var(--primary-light); border-color: var(--primary-color); }
+        .btn-option.active {
+            background-color: var(--primary-dark);
+            color: #ffffff;
+            border-color: var(--primary-dark);
+            box-shadow: 0 2px 4px rgba(5, 150, 105, 0.3);
+        }
+
+        .controls-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        @media (max-width: 900px) { .controls-grid { grid-template-columns: 1fr; } }
+
+        .slider-control-box { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        .btn-step {
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            color: var(--primary-dark);
+            width: 32px; height: 32px;
+            border-radius: 6px; font-size: 1.1rem; font-weight: bold;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .slider-input { flex: 1; accent-color: var(--primary-dark); cursor: pointer; }
+        .val-display-box {
+            border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px;
+            min-width: 60px; text-align: center; font-weight: 700; color: var(--primary-dark); background-color: #ffffff;
+        }
+
+        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
+        @media (max-width: 768px) { .summary-grid { grid-template-columns: 1fr; } }
+
+        .summary-card {
+            background-color: var(--card-bg); border-radius: var(--radius-lg); padding: 20px 24px;
+            box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); position: relative; overflow: hidden;
+        }
+        .summary-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
+        .summary-card.card-blue::before { background-color: #2563eb; }
+        .summary-card.card-green::before { background-color: var(--primary-color); }
+        .summary-card.card-orange::before { background-color: #f97316; }
+
+        .summary-card .title { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; }
+        .summary-card .val { font-size: 2rem; font-weight: 800; color: var(--text-dark); margin-bottom: 8px; line-height: 1; }
+        .summary-card .sub { font-size: 0.825rem; color: var(--text-muted); }
+
+        .chart-header {
+            font-size: 1.1rem; font-weight: 700; color: var(--primary-dark);
+            display: flex; align-items: center; gap: 8px; padding-bottom: 16px;
+            border-bottom: 1px solid #f3f4f6; margin-bottom: 20px;
+        }
+        .chart-box { position: relative; height: 320px; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <div class="header-title">醫療融資分析計算器</div>
+
+    <div class="card">
+        <!-- 資料庫連結狀態欄 -->
+        <div class="db-status-bar">
+            <div>
+                數據源狀態：<span id="dbStatus" class="status-tag offline">未連結 supreme.xlsx (使用預設演算法)</span>
+            </div>
+            <div>
+                <label for="excelUpload" style="cursor: pointer; text-decoration: underline; color: var(--primary-dark); font-weight: 600;">
+                    📁 載入/變更 supreme.xlsx
+                </label>
+                <input type="file" id="excelUpload" accept=".xlsx, .xls" style="display: none;">
+            </div>
+        </div>
+
+        <!-- 計劃級別 -->
+        <span class="section-label">計劃級別 (Level)</span>
+        <div class="button-group" id="planGroup">
+            <button type="button" class="btn-option active" data-value="smart">智選計劃 (Smart)</button>
+            <button type="button" class="btn-option" data-value="advance">精選計劃 (Advance)</button>
+            <button type="button" class="btn-option" data-value="deluxe">優選計劃 (Deluxe)</button>
+        </div>
+
+        <!-- 自付額選項 -->
+        <span class="section-label">自付額選項 (Deductible)</span>
+        <div class="button-group" id="deductibleGroup">
+            <button type="button" class="btn-option active" data-value="0">0</button>
+            <button type="button" class="btn-option" data-value="22800">22,800</button>
+            <button type="button" class="btn-option" data-value="45000">45,000</button>
+            <button type="button" class="btn-option" data-value="100000">100,000</button>
+        </div>
+
+        <!-- 控制器 -->
+        <div class="controls-grid">
+            <div>
+                <span class="section-label">現在年齡 (Current Age)</span>
+                <div class="slider-control-box">
+                    <button type="button" class="btn-step" onclick="adjustValue('currentAge', -1)">-</button>
+                    <input type="range" class="slider-input" id="currentAge" min="0" max="80" value="30">
+                    <button type="button" class="btn-step" onclick="adjustValue('currentAge', 1)">+</button>
+                    <div class="val-display-box" id="currentAgeVal">30</div>
+                </div>
+            </div>
+
+            <div>
+                <span class="section-label">目標年齡 (Target Age)</span>
+                <div class="slider-control-box">
+                    <button type="button" class="btn-step" onclick="adjustValue('targetAge', -1)">-</button>
+                    <input type="range" class="slider-input" id="targetAge" min="1" max="100" value="65">
+                    <button type="button" class="btn-step" onclick="adjustValue('targetAge', 1)">+</button>
+                    <div class="val-display-box" id="targetAgeVal">65</div>
+                </div>
+            </div>
+
+            <div>
+                <span class="section-label">預計年度醫療通脹率 (%)</span>
+                <div class="slider-control-box">
+                    <button type="button" class="btn-step" onclick="adjustValue('inflation', -1)">-</button>
+                    <input type="range" class="slider-input" id="inflation" min="0" max="15" value="0" step="1">
+                    <button type="button" class="btn-step" onclick="adjustValue('inflation', 1)">+</button>
+                    <div class="val-display-box" id="inflationVal">0</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 結果區塊 -->
+    <div class="summary-grid">
+        <div class="summary-card card-blue">
+            <div class="title">年齡相差 (保障年期)</div>
+            <div class="val"><span id="resYears">35</span> 年</div>
+            <div class="sub">由 <span id="resStartAge">30</span> 歲至 <span id="resEndAge">65</span> 歲</div>
+        </div>
+
+        <div class="summary-card card-green">
+            <div class="title">平均每月保費 (含通脹)</div>
+            <div class="val" id="resMonthly">0</div>
+            <div class="sub">基於選定年期內總保費平均算得</div>
+        </div>
+
+        <div class="summary-card card-orange">
+            <div class="title">保費總和 (含通脹)</div>
+            <div class="val" id="resTotal">0</div>
+            <div class="sub">基本保費總和 (不含通脹): <span id="resBaseTotal">0</span></div>
+        </div>
+    </div>
+
+    <!-- 圖表區塊 -->
+    <div class="card">
+        <div class="chart-header">📊 保費趨勢圖 (Premium Trend)</div>
+        <div class="chart-box">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlan = 'smart';
+        let selectedDeductible = 0;
+        let chartInstance = null;
+        let excelDatabase = null; // 儲存解析後的 supreme.xlsx 數據
+
+        // 嘗試自動載入伺服器上的 supreme.xlsx
+        async function tryAutoLoadExcel() {
+            try {
+                const response = await fetch('supreme.xlsx');
+                if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    processExcelData(arrayBuffer, 'supreme.xlsx (自動連結)');
+                }
+            } catch (e) {
+                console.log("未找到同目錄下的 supreme.xlsx，切換為手動載入模式");
+            }
+        }
+
+        // 解析 Excel ArrayBuffer
+        function processExcelData(buffer, fileName) {
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // 將工作表轉換為 JSON 格式
+            excelDatabase = XLSX.utils.sheet_to_json(worksheet);
+            
+            const statusEl = document.getElementById('dbStatus');
+            statusEl.innerText = `已成功連結數據源：${fileName}`;
+            statusEl.className = 'status-tag online';
+            
+            calculate();
+        }
+
+        // 監聽檔案手動上傳
+        document.getElementById('excelUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                processExcelData(e.target.result, file.name);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // 獲取保費：優先使用 Excel，若無則降級使用預設公式
+        function calculatePremium(age, plan, deductible) {
+            if (excelDatabase && excelDatabase.length > 0) {
+                // 假設 Excel 的欄位名稱為：Age, Plan, Deductible, Premium
+                const record = excelDatabase.find(row => 
+                    row.Age == age && 
+                    row.Plan.toString().toLowerCase() === plan.toLowerCase() && 
+                    row.Deductible == deductible
+                );
+                if (record && record.Premium) {
+                    return parseFloat(record.Premium);
+                }
+            }
+
+            // 預設演算法（當 Excel 數據尚未對應時備用）
+            let base = 3500;
+            if (age < 20) base = 2000 + age * 80;
+            else if (age < 50) base = 3000 + (age - 20) * 350;
+            else if (age < 70) base = 13500 + (age - 50) * 900;
+            else base = 31500 + (age - 70) * 1500;
+
+            if (plan === 'smart') base *= 1.0;
+            else if (plan === 'advance') base *= 1.25;
+            else if (plan === 'deluxe') base *= 1.6;
+
+            if (deductible === 22800) base *= 0.75;
+            else if (deductible === 45000) base *= 0.60;
+            else if (deductible === 100000) base *= 0.40;
+
+            return base;
+        }
+
+        function initButtonGroup(groupId, callback) {
+            const container = document.getElementById(groupId);
+            if (!container) return;
+            const buttons = container.querySelectorAll('.btn-option');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    buttons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    callback(btn.dataset.value);
+                });
+            });
+        }
+
+        function adjustValue(id, step) {
+            const input = document.getElementById(id);
+            if (!input) return;
+            let val = parseFloat(input.value) + step;
+            if (val >= parseFloat(input.min) && val <= parseFloat(input.max)) {
+                input.value = val;
+                updateDisplay(id);
+                calculate();
+            }
+        }
+
+        function updateDisplay(id) {
+            const input = document.getElementById(id);
+            const display = document.getElementById(id + 'Val');
+            if (input && display) display.innerText = input.value;
+        }
+
+        function calculate() {
+            const startAgeInput = document.getElementById('currentAge');
+            const endAgeInput = document.getElementById('targetAge');
+            const inflationInput = document.getElementById('inflation');
+
+            if (!startAgeInput || !endAgeInput || !inflationInput) return;
+
+            const startAge = parseInt(startAgeInput.value);
+            const endAge = parseInt(endAgeInput.value);
+            const inflation = parseFloat(inflationInput.value) / 100;
+
+            if (startAge >= endAge) {
+                document.getElementById('resYears').innerText = 0;
+                document.getElementById('resMonthly').innerText = 0;
+                document.getElementById('resTotal').innerText = 0;
+                document.getElementById('resBaseTotal').innerText = 0;
+                return;
+            }
+
+            const years = endAge - startAge;
+            let totalInflated = 0;
+            let totalBase = 0;
+
+            const labels = [];
+            const dataInflated = [];
+            const dataBase = [];
+
+            for (let i = 0; i <= years; i++) {
+                const currentAge = startAge + i;
+                const basePrem = calculatePremium(currentAge, selectedPlan, selectedDeductible);
+                const inflatedPrem = basePrem * Math.pow(1 + inflation, i);
+
+                totalBase += basePrem;
+                totalInflated += inflatedPrem;
+
+                labels.push(currentAge + ' 歲');
+                dataBase.push(Math.round(basePrem));
+                dataInflated.push(Math.round(inflatedPrem));
+            }
+
+            const avgMonthly = Math.round(totalInflated / ((years + 1) * 12));
+
+            document.getElementById('resYears').innerText = years;
+            document.getElementById('resStartAge').innerText = startAge;
+            document.getElementById('resEndAge').innerText = endAge;
+            document.getElementById('resMonthly').innerText = avgMonthly.toLocaleString();
+            document.getElementById('resTotal').innerText = Math.round(totalInflated).toLocaleString();
+            document.getElementById('resBaseTotal').innerText = Math.round(totalBase).toLocaleString();
+
+            updateChart(labels, dataBase, dataInflated);
+        }
+
+        function updateChart(labels, baseData, inflatedData) {
+            const canvas = document.getElementById('trendChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            if (chartInstance) chartInstance.destroy();
+            if (typeof Chart === 'undefined') return;
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: '年度保費 (含通脹)', data: inflatedData, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.35, borderWidth: 2 },
+                        { label: '基本保費 (不含通脹)', data: baseData, borderColor: '#9ca3af', borderDash: [5, 5], fill: false, tension: 0.35, borderWidth: 1.5 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: false, ticks: { callback: val => '$' + val.toLocaleString() } } }
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initButtonGroup('planGroup', val => { selectedPlan = val; calculate(); });
+            initButtonGroup('deductibleGroup', val => { selectedDeductible = parseInt(val); calculate(); });
+
+            ['currentAge', 'targetAge', 'inflation'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) input.addEventListener('input', () => { updateDisplay(id); calculate(); });
+            });
+
+            tryAutoLoadExcel();
+            calculate();
+        });
+    </script>
+</body>
+</html>

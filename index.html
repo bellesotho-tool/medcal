@@ -207,6 +207,15 @@
             <option value="flexi">宏利全護航自願醫保靈活計劃</option>
         </select>
 
+        <!-- 性別 (Gender) - 全護航專用區塊 (預設隱藏) -->
+        <div id="genderContainer" style="display: none; margin-bottom: 20px;">
+            <span class="section-label">性別 (Gender)</span>
+            <div class="button-group" id="genderGroup">
+                <button type="button" class="btn-option active" data-value="male">男 (Male)</button>
+                <button type="button" class="btn-option" data-value="female">女 (Female)</button>
+            </div>
+        </div>
+
         <!-- 計劃級別 (Level) -->
         <span class="section-label" id="levelTitle">計劃級別 (Level)</span>
         <div class="button-group" id="planGroup">
@@ -305,6 +314,7 @@
 
     <script>
         let selectedMainPlan = 'supreme';
+        let selectedGender = 'male';
         let selectedPlanLevel = 'smart';
         let selectedDeductible = '0';
         let chartInstance = null;
@@ -370,9 +380,11 @@
             const deductibleContainer = document.getElementById('deductibleGroup');
             const levelTitle = document.getElementById('levelTitle');
             const deductibleTitle = document.getElementById('deductibleTitle');
+            const genderContainer = document.getElementById('genderContainer');
 
             if (selectedMainPlan === 'supreme') {
                 // 宏利晉悅
+                genderContainer.style.display = 'none'; // 隱藏性別區塊
                 levelTitle.innerText = "計劃級別 (Level)";
                 deductibleTitle.innerText = "自付額選項 (Deductible)";
 
@@ -390,6 +402,7 @@
 
             } else if (selectedMainPlan === 'flexi') {
                 // 宏利全護航
+                genderContainer.style.display = 'block'; // 顯示性別區塊
                 levelTitle.innerText = "計劃級別 (Level)";
                 deductibleTitle.innerText = "額外醫療保障 (Supplementary medical benefit)";
 
@@ -441,6 +454,11 @@
 
         // 事件綁定
         function bindButtonGroupEvents() {
+            initButtonGroup('genderGroup', val => {
+                selectedGender = val;
+                calculate();
+            });
+
             initButtonGroup('planGroup', val => { 
                 selectedPlanLevel = val; 
                 if (selectedMainPlan === 'supreme') renderSupremeDeductibles();
@@ -454,15 +472,27 @@
             });
         }
 
-        function calculatePremium(age, mainPlan, level, deductible) {
+        function calculatePremium(age, mainPlan, gender, level, deductible) {
             const activeDb = databases[mainPlan];
 
             if (activeDb && activeDb.length > 0) {
-                const record = activeDb.find(row => 
-                    row.Age == age && 
-                    row.Plan.toString().toLowerCase() === level.toLowerCase() && 
-                    row.Deductible.toString().toLowerCase() === deductible.toString().toLowerCase()
-                );
+                const record = activeDb.find(row => {
+                    const matchAge = row.Age == age;
+                    const matchPlan = row.Plan.toString().toLowerCase() === level.toLowerCase();
+                    const matchDeductible = row.Deductible.toString().toLowerCase() === deductible.toString().toLowerCase();
+                    
+                    // 若表格包含 Gender 欄位，則同時比對性別
+                    let matchGender = true;
+                    if (mainPlan === 'flexi' && row.Gender) {
+                        const g = row.Gender.toString().toLowerCase();
+                        matchGender = (g === gender.toLowerCase()) || 
+                                      (gender === 'male' && g.includes('男')) || 
+                                      (gender === 'female' && g.includes('女'));
+                    }
+                    
+                    return matchAge && matchPlan && matchDeductible && matchGender;
+                });
+
                 if (record && record.Premium) {
                     return parseFloat(record.Premium);
                 }
@@ -475,7 +505,10 @@
             else if (age < 70) base = 13500 + (age - 50) * 900;
             else base = 31500 + (age - 70) * 1500;
 
-            if (mainPlan === 'flexi') base *= 1.15;
+            if (mainPlan === 'flexi') {
+                base *= 1.15;
+                if (gender === 'female' && age >= 25 && age <= 55) base *= 1.1; // 女性微調
+            }
 
             if (level === 'advance' || level === 'semi-private') base *= 1.25;
             else if (level === 'deluxe' || level === 'private') base *= 1.6;
@@ -551,7 +584,7 @@
 
             for (let i = 0; i <= years; i++) {
                 const currentAge = startAge + i;
-                const basePrem = calculatePremium(currentAge, selectedMainPlan, selectedPlanLevel, selectedDeductible);
+                const basePrem = calculatePremium(currentAge, selectedMainPlan, selectedGender, selectedPlanLevel, selectedDeductible);
                 const inflationFactor = Math.pow(1 + inflation, i);
                 const inflatedPrem = basePrem * inflationFactor;
 

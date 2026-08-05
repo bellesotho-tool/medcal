@@ -164,10 +164,10 @@
 
         .detail-table {
             width: 100%;
-            min-width: 580px; /* 確保表格數據欄位寬度比例完整 */
+            max-width: 350px; /* 確保表格數據欄位寬度比例完整 */
             border-collapse: collapse;
             text-align: right;
-            font-size: 0.82rem;
+            font-size: 0.5rem;
         }
 
         .detail-table th, .detail-table td {
@@ -192,13 +192,13 @@
         /* 📱 手機版響應式微調 (RWD Media Queries) */
         @media (max-width: 768px) {
             body { padding: 10px; }
-            .header-title { font-size: 1.2rem; padding: 12px; }
+            .header-title { font-size: 1rem; padding: 12px; }
             .controls-grid { grid-template-columns: 1fr; gap: 12px; }
             .summary-grid { grid-template-columns: 1fr; gap: 10px; }
             
             /* 手機版按鈕字級與內距微調 */
             .btn-option {
-                font-size: 0.75rem;
+                font-size: 0.5rem;
                 padding: 8px 2px;
             }
 

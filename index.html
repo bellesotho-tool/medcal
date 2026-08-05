@@ -207,7 +207,7 @@
             <option value="flexi">宏利全護航自願醫保靈活計劃</option>
         </select>
 
-        <!-- 性別 (Gender) - 全護航專用區塊 (預設隱藏) -->
+        <!-- 性別 (Gender) - 全護航專用區塊 -->
         <div id="genderContainer" style="display: none; margin-bottom: 20px;">
             <span class="section-label">性別 (Gender)</span>
             <div class="button-group" id="genderGroup">
@@ -319,19 +319,18 @@
         let selectedDeductible = '0';
         let chartInstance = null;
 
-        // 獨立資料庫：晉悅 (supreme) 與 全護航 (flexi)
         let databases = {
             supreme: null,
             flexi: null
         };
 
-        // 自動嘗試載入同目錄下的 supreme.xlsx 與 flexi.xlsx
         async function tryAutoLoadExcels() {
             try {
                 const resSupreme = await fetch('supreme.xlsx');
                 if (resSupreme.ok) {
                     const buffer = await resSupreme.arrayBuffer();
                     databases.supreme = parseExcelBuffer(buffer);
+                    console.log("supreme.xlsx 載入成功");
                 }
             } catch (e) { console.log("未檢測到 supreme.xlsx"); }
 
@@ -340,6 +339,7 @@
                 if (resFlexi.ok) {
                     const buffer = await resFlexi.arrayBuffer();
                     databases.flexi = parseExcelBuffer(buffer);
+                    console.log("flexi.xlsx 載入成功");
                 }
             } catch (e) { console.log("未檢測到 flexi.xlsx"); }
 
@@ -353,28 +353,72 @@
             return XLSX.utils.sheet_to_json(worksheet);
         }
 
-        // 手動檔案上傳監聽
-        const excelUploadEl = document.getElementById('excelUpload');
-        if (excelUploadEl) {
-            excelUploadEl.addEventListener('change', function(e) {
-                const files = e.target.files;
-                if (!files || files.length === 0) return;
+        function calculatePremium(age, mainPlan, gender, level, deductible) {
+            const activeDb = databases[mainPlan];
 
-                Array.from(files).forEach(file => {
-                    const reader = new FileReader();
-                    reader.onload = function(evt) {
-                        const parsedData = parseExcelBuffer(evt.target.result);
-                        const fileName = file.name.toLowerCase();
-                        if (fileName.includes('flexi')) databases.flexi = parsedData;
-                        else databases.supreme = parsedData;
-                        calculate();
-                    };
-                    reader.readAsArrayBuffer(file);
+            if (activeDb && activeDb.length > 0) {
+                const record = activeDb.find(row => {
+                    // 1. 年齡判定
+                    const ageVal = row.Age || row['年齡'] || row['Age '];
+                    const matchAge = ageVal == age;
+
+                    // 2. 計劃級別判定（支援英文與中文欄位值）
+                    const planVal = (row.Plan || row['計劃級別'] || row['Plan '])?.toString().toLowerCase();
+                    const matchPlan = planVal === level.toLowerCase() || 
+                                      (level === 'ward' && planVal?.includes('普通')) ||
+                                      (level === 'semi-private' && planVal?.includes('半私')) ||
+                                      (level === 'private' && planVal?.includes('私'));
+
+                    // 3. 自付額/額外保障判定
+                    const dedVal = (row.Deductible || row['自付額'] || row['額外醫療保障'])?.toString().toLowerCase();
+                    const matchDeductible = dedVal === deductible.toString().toLowerCase() ||
+                                            (deductible === 'none' && (dedVal?.includes('沒有') || dedVal === '0')) ||
+                                            (deductible === 'high' && dedVal?.includes('高額')) ||
+                                            (deductible === 'super_high' && dedVal?.includes('特級'));
+
+                    // 4. 性別判定 (僅全護航或含 Gender 欄位時比對)
+                    let matchGender = true;
+                    const genderVal = (row.Gender || row['性別'] || row['Sex'])?.toString().toLowerCase();
+                    if (genderVal) {
+                        matchGender = (genderVal === gender.toLowerCase()) || 
+                                      (gender === 'male' && (genderVal.includes('男') || genderVal.startsWith('m'))) || 
+                                      (gender === 'female' && (genderVal.includes('女') || genderVal.startsWith('f')));
+                    }
+
+                    return matchAge && matchPlan && matchDeductible && matchGender;
                 });
-            });
+
+                if (record) {
+                    const premKey = Object.keys(record).find(k => k.toLowerCase().includes('premium') || k.includes('保費'));
+                    if (premKey && record[premKey]) {
+                        return parseFloat(record[premKey]);
+                    }
+                }
+            }
+
+            // 備用演算法 (當數據庫未連結時備用)
+            let base = 3500;
+            if (age < 20) base = 2000 + age * 80;
+            else if (age < 50) base = 3000 + (age - 20) * 350;
+            else if (age < 70) base = 13500 + (age - 50) * 900;
+            else base = 31500 + (age - 70) * 1500;
+
+            if (mainPlan === 'flexi') {
+                base *= 1.15;
+                if (gender === 'female' && age >= 25 && age <= 55) base *= 1.1;
+            }
+
+            if (level === 'advance' || level === 'semi-private') base *= 1.25;
+            else if (level === 'deluxe' || level === 'private') base *= 1.6;
+
+            if (deductible === '8000' || deductible === 'high') base *= 0.88;
+            else if (deductible === '22800' || deductible === 'super_high') base *= 0.75;
+            else if (deductible === '45000') base *= 0.60;
+            else if (deductible === '100000') base *= 0.40;
+
+            return base;
         }
 
-        // 渲染按鈕介面（根據主保障計劃動態改變選項內容與文字）
         function renderPlanAndDeductibleUI() {
             const planContainer = document.getElementById('planGroup');
             const deductibleContainer = document.getElementById('deductibleGroup');
@@ -383,8 +427,7 @@
             const genderContainer = document.getElementById('genderContainer');
 
             if (selectedMainPlan === 'supreme') {
-                // 宏利晉悅
-                genderContainer.style.display = 'none'; // 隱藏性別區塊
+                genderContainer.style.display = 'none';
                 levelTitle.innerText = "計劃級別 (Level)";
                 deductibleTitle.innerText = "自付額選項 (Deductible)";
 
@@ -401,8 +444,7 @@
                 renderSupremeDeductibles();
 
             } else if (selectedMainPlan === 'flexi') {
-                // 宏利全護航
-                genderContainer.style.display = 'block'; // 顯示性別區塊
+                genderContainer.style.display = 'block';
                 levelTitle.innerText = "計劃級別 (Level)";
                 deductibleTitle.innerText = "額外醫療保障 (Supplementary medical benefit)";
 
@@ -430,7 +472,6 @@
             bindButtonGroupEvents();
         }
 
-        // 渲染晉悅自付額按鈕 (含 $8,000 隱藏邏輯)
         function renderSupremeDeductibles() {
             const deductibleContainer = document.getElementById('deductibleGroup');
             let deductibles = [
@@ -441,7 +482,6 @@
                 { label: '$100,000', value: '100000' }
             ];
 
-            // 智選計劃 (Smart) 不支援 $8,000
             if (selectedPlanLevel === 'smart') {
                 deductibles = deductibles.filter(d => d.value !== '8000');
                 if (selectedDeductible === '8000') selectedDeductible = '0';
@@ -452,73 +492,15 @@
             ).join('');
         }
 
-        // 事件綁定
         function bindButtonGroupEvents() {
-            initButtonGroup('genderGroup', val => {
-                selectedGender = val;
-                calculate();
-            });
-
+            initButtonGroup('genderGroup', val => { selectedGender = val; calculate(); });
             initButtonGroup('planGroup', val => { 
                 selectedPlanLevel = val; 
                 if (selectedMainPlan === 'supreme') renderSupremeDeductibles();
                 bindButtonGroupEvents();
                 calculate(); 
             });
-
-            initButtonGroup('deductibleGroup', val => { 
-                selectedDeductible = val; 
-                calculate(); 
-            });
-        }
-
-        function calculatePremium(age, mainPlan, gender, level, deductible) {
-            const activeDb = databases[mainPlan];
-
-            if (activeDb && activeDb.length > 0) {
-                const record = activeDb.find(row => {
-                    const matchAge = row.Age == age;
-                    const matchPlan = row.Plan.toString().toLowerCase() === level.toLowerCase();
-                    const matchDeductible = row.Deductible.toString().toLowerCase() === deductible.toString().toLowerCase();
-                    
-                    // 若表格包含 Gender 欄位，則同時比對性別
-                    let matchGender = true;
-                    if (mainPlan === 'flexi' && row.Gender) {
-                        const g = row.Gender.toString().toLowerCase();
-                        matchGender = (g === gender.toLowerCase()) || 
-                                      (gender === 'male' && g.includes('男')) || 
-                                      (gender === 'female' && g.includes('女'));
-                    }
-                    
-                    return matchAge && matchPlan && matchDeductible && matchGender;
-                });
-
-                if (record && record.Premium) {
-                    return parseFloat(record.Premium);
-                }
-            }
-
-            // 備用演算法
-            let base = 3500;
-            if (age < 20) base = 2000 + age * 80;
-            else if (age < 50) base = 3000 + (age - 20) * 350;
-            else if (age < 70) base = 13500 + (age - 50) * 900;
-            else base = 31500 + (age - 70) * 1500;
-
-            if (mainPlan === 'flexi') {
-                base *= 1.15;
-                if (gender === 'female' && age >= 25 && age <= 55) base *= 1.1; // 女性微調
-            }
-
-            if (level === 'advance' || level === 'semi-private') base *= 1.25;
-            else if (level === 'deluxe' || level === 'private') base *= 1.6;
-
-            if (deductible === '8000' || deductible === 'high') base *= 0.88;
-            else if (deductible === '22800' || deductible === 'super_high') base *= 0.75;
-            else if (deductible === '45000') base *= 0.60;
-            else if (deductible === '100000') base *= 0.40;
-
-            return base;
+            initButtonGroup('deductibleGroup', val => { selectedDeductible = val; calculate(); });
         }
 
         function initButtonGroup(groupId, callback) {
@@ -648,7 +630,6 @@
             if (mainPlanSelect) {
                 mainPlanSelect.addEventListener('change', (e) => {
                     selectedMainPlan = e.target.value;
-                    // 重設預設選擇級別與自付額
                     if (selectedMainPlan === 'supreme') {
                         selectedPlanLevel = 'smart';
                         selectedDeductible = '0';

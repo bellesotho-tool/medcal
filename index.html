@@ -2,7 +2,7 @@
 <html lang="zh-HK">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>醫療融資分析計算器</title>
     <!-- 引入 Chart.js 用於圖表 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -25,48 +25,46 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: var(--bg-body); color: var(--text-dark); padding: 24px; max-width: 1280px; margin: 0 auto; }
+        body { background-color: var(--bg-body); color: var(--text-dark); padding: 16px; max-width: 1280px; margin: 0 auto; }
 
         .header-title {
             background-color: var(--primary-dark);
             color: #ffffff;
             text-align: center;
-            padding: 20px;
+            padding: 16px;
             border-radius: var(--radius-lg);
-            font-size: 1.6rem;
+            font-size: 1.4rem;
             font-weight: 700;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             box-shadow: var(--shadow-sm);
         }
 
         .card {
             background-color: var(--card-bg);
             border-radius: var(--radius-lg);
-            padding: 24px;
-            margin-bottom: 20px;
+            padding: 16px;
+            margin-bottom: 16px;
             box-shadow: var(--shadow-sm);
             border: 1px solid var(--border-color);
         }
 
         /* 數據源狀態欄（隱藏） */
-        .db-status-bar {
-            display: none;
-        }
+        .db-status-bar { display: none; }
 
-        .section-label { font-size: 0.95rem; font-weight: 700; color: var(--text-dark); margin-bottom: 10px; display: block; }
+        .section-label { font-size: 0.9rem; font-weight: 700; color: var(--text-dark); margin-bottom: 8px; display: block; }
 
         /* 下拉選單樣式 */
         .select-input {
             width: 100%;
-            padding: 12px 16px;
-            font-size: 1rem;
+            padding: 10px 12px;
+            font-size: 0.95rem;
             font-weight: 600;
             color: var(--text-dark);
             background-color: #f9fafb;
             border: 1px solid var(--border-color);
             border-radius: var(--radius-md);
             outline: none;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             cursor: pointer;
             transition: all 0.2s ease;
         }
@@ -75,25 +73,32 @@
             background-color: #ffffff;
         }
 
+        /* 按鈕群組：使用彈性盒模型 (Flexbox) 確保按比例整排自適應顯示 */
         .button-group {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 6px;
+            margin-bottom: 16px;
+            width: 100%;
         }
 
         .btn-option {
+            flex: 1 1 0px;
+            min-width: 0; /* 防止溢出 */
             background-color: #f9fafb;
             border: 1px solid var(--border-color);
             border-radius: var(--radius-md);
-            padding: 14px 10px;
-            font-size: 0.95rem;
+            padding: 10px 4px;
+            font-size: 0.85rem;
             font-weight: 600;
             color: var(--text-dark);
             cursor: pointer;
             transition: all 0.2s ease;
             text-align: center;
             user-select: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .btn-option:hover { background-color: var(--primary-light); border-color: var(--primary-color); }
@@ -104,66 +109,71 @@
             box-shadow: 0 2px 4px rgba(5, 150, 105, 0.3);
         }
 
-        .controls-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-        @media (max-width: 900px) { .controls-grid { grid-template-columns: 1fr; } }
+        /* 控制器網格 */
+        .controls-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 
-        .slider-control-box { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+        .slider-control-box { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
         .btn-step {
             background-color: #ffffff;
             border: 1px solid var(--border-color);
             color: var(--primary-dark);
-            width: 32px; height: 32px;
-            border-radius: 6px; font-size: 1.1rem; font-weight: bold;
+            width: 28px; height: 28px;
+            border-radius: 6px; font-size: 1rem; font-weight: bold;
             cursor: pointer; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
         }
-        .slider-input { flex: 1; accent-color: var(--primary-dark); cursor: pointer; }
+        .slider-input { flex: 1; min-width: 50px; accent-color: var(--primary-dark); cursor: pointer; }
         .val-display-box {
-            border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px;
-            min-width: 60px; text-align: center; font-weight: 700; color: var(--primary-dark); background-color: #ffffff;
+            border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 6px;
+            min-width: 42px; text-align: center; font-weight: 700; color: var(--primary-dark); 
+            font-size: 0.85rem; background-color: #ffffff; flex-shrink: 0;
         }
 
-        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; }
-        @media (max-width: 768px) { .summary-grid { grid-template-columns: 1fr; } }
+        .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 
         .summary-card {
-            background-color: var(--card-bg); border-radius: var(--radius-lg); padding: 20px 24px;
+            background-color: var(--card-bg); border-radius: var(--radius-lg); padding: 14px 16px;
             box-shadow: var(--shadow-sm); border: 1px solid var(--border-color); position: relative; overflow: hidden;
         }
-        .summary-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; }
+        .summary-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
         .summary-card.card-blue::before { background-color: #2563eb; }
         .summary-card.card-green::before { background-color: var(--primary-color); }
         .summary-card.card-orange::before { background-color: #f97316; }
 
-        .summary-card .title { font-size: 0.9rem; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; }
-        .summary-card .val { font-size: 2rem; font-weight: 800; color: var(--text-dark); margin-bottom: 8px; line-height: 1; }
-        .summary-card .sub { font-size: 0.825rem; color: var(--text-muted); }
+        .summary-card .title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+        .summary-card .val { font-size: 1.4rem; font-weight: 800; color: var(--text-dark); margin-bottom: 4px; line-height: 1.1; }
+        .summary-card .sub { font-size: 0.75rem; color: var(--text-muted); }
 
         .card-header {
-            font-size: 1.1rem; font-weight: 700; color: var(--primary-dark);
-            display: flex; align-items: center; gap: 8px; padding-bottom: 16px;
-            border-bottom: 1px solid #f3f4f6; margin-bottom: 20px;
+            font-size: 1rem; font-weight: 700; color: var(--primary-dark);
+            display: flex; align-items: center; gap: 6px; padding-bottom: 12px;
+            border-bottom: 1px solid #f3f4f6; margin-bottom: 14px;
         }
-        .chart-box { position: relative; height: 320px; width: 100%; }
+        .chart-box { position: relative; height: 260px; width: 100%; }
 
-        /* 詳細表格樣式 */
+        /* 詳細表格樣式 (手機版按比例可視優化) */
         .table-container {
             max-height: 400px;
             overflow-y: auto;
+            overflow-x: auto;
             border: 1px solid #e5e7eb;
             border-radius: var(--radius-md);
             background-color: #ffffff;
+            -webkit-overflow-scrolling: touch;
         }
 
         .detail-table {
             width: 100%;
+            min-width: 580px; /* 確保表格數據欄位寬度比例完整 */
             border-collapse: collapse;
             text-align: right;
-            font-size: 0.92rem;
+            font-size: 0.82rem;
         }
 
         .detail-table th, .detail-table td {
-            padding: 14px 20px;
+            padding: 10px 8px;
             border-bottom: 1px solid #f3f4f6;
+            white-space: nowrap;
         }
 
         .detail-table th {
@@ -176,12 +186,24 @@
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
-        .detail-table th:first-child, .detail-table td:first-child {
-            text-align: left;
-        }
+        .detail-table th:first-child, .detail-table td:first-child { text-align: left; }
+        .detail-table tbody tr:hover { background-color: #f8fafc; }
 
-        .detail-table tbody tr:hover {
-            background-color: #f8fafc;
+        /* 📱 手機版響應式微調 (RWD Media Queries) */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .header-title { font-size: 1.2rem; padding: 12px; }
+            .controls-grid { grid-template-columns: 1fr; gap: 12px; }
+            .summary-grid { grid-template-columns: 1fr; gap: 10px; }
+            
+            /* 手機版按鈕字級與內距微調 */
+            .btn-option {
+                font-size: 0.75rem;
+                padding: 8px 2px;
+            }
+
+            .summary-card .val { font-size: 1.3rem; }
+            .chart-box { height: 220px; }
         }
     </style>
 </head>
@@ -198,7 +220,7 @@
         </select>
 
         <!-- 性別 (Gender) - 全護航專用區塊 -->
-        <div id="genderContainer" style="display: none; margin-bottom: 20px;">
+        <div id="genderContainer" style="display: none; margin-bottom: 16px;">
             <span class="section-label">性別 (Gender)</span>
             <div class="button-group" id="genderGroup">
                 <button type="button" class="btn-option active" data-value="male">男 (Male)</button>
@@ -314,43 +336,34 @@
             flexi: null
         };
 
-        // 強力自動載入函式（繞過快取 + 支援多種檔名路徑）
         async function fetchExcelWithFallback(fileNames) {
-            const timestamp = new Date().getTime(); // 防止 GitHub Pages 快取
+            const timestamp = new Date().getTime();
             for (let name of fileNames) {
                 try {
                     const res = await fetch(`${name}?v=${timestamp}`);
                     if (res.ok) {
                         const buffer = await res.arrayBuffer();
                         const parsed = parseExcelBuffer(buffer);
-                        if (parsed && parsed.length > 0) {
-                            return { parsed, name };
-                        }
+                        if (parsed && parsed.length > 0) return { parsed, name };
                     }
                 } catch (e) {
-                    console.warn(`嘗試載入 ${name} 失敗:`, e);
+                    console.warn(`載入 ${name} 失敗:`, e);
                 }
             }
             return null;
         }
 
         async function tryAutoLoadExcels() {
-            // 嘗試載入 supreme.xlsx
             const resSupreme = await fetchExcelWithFallback(['supreme.xlsx', 'Supreme.xlsx', './supreme.xlsx']);
             if (resSupreme) {
                 databases.supreme = resSupreme.parsed;
-                console.log(`✅ [Supreme] 成功載入檔案: ${resSupreme.name} (共 ${resSupreme.parsed.length} 筆數據)`);
-            } else {
-                console.error("❌ [Supreme] 無法連結 supreme.xlsx");
+                console.log(`✅ [Supreme] 成功載入檔案: ${resSupreme.name}`);
             }
 
-            // 嘗試載入 flexi.xlsx
             const resFlexi = await fetchExcelWithFallback(['flexi.xlsx', 'Flexi.xlsx', './flexi.xlsx']);
             if (resFlexi) {
                 databases.flexi = resFlexi.parsed;
-                console.log(`✅ [Flexi] 成功載入檔案: ${resFlexi.name} (共 ${resFlexi.parsed.length} 筆數據)`);
-            } else {
-                console.error("❌ [Flexi] 無法連結 flexi.xlsx");
+                console.log(`✅ [Flexi] 成功載入檔案: ${resFlexi.name}`);
             }
 
             calculate();
@@ -363,7 +376,7 @@
                 const worksheet = workbook.Sheets[firstSheetName];
                 return XLSX.utils.sheet_to_json(worksheet);
             } catch (err) {
-                console.error("解析 Excel 發生錯誤:", err);
+                console.error("解析 Excel 錯誤:", err);
                 return null;
             }
         }
@@ -373,11 +386,9 @@
 
             if (activeDb && activeDb.length > 0) {
                 const record = activeDb.find(row => {
-                    // 1. 比對年齡 (Age / 年齡)
                     const ageVal = row.Age !== undefined ? row.Age : (row['年齡'] !== undefined ? row['年齡'] : row['Age ']);
                     const matchAge = ageVal == age;
 
-                    // 2. 比對計劃級別 (Plan / 計劃級別)
                     const rawPlan = (row.Plan || row['計劃級別'] || row['計劃'] || row['Level'])?.toString().toLowerCase().trim();
                     let matchPlan = false;
                     if (rawPlan) {
@@ -390,7 +401,6 @@
                                   (level === 'deluxe' && rawPlan.includes('deluxe'));
                     }
 
-                    // 3. 比對自付額 / 額外保障 (Deductible / 自付額 / 額外醫療保障)
                     const rawDed = (row.Deductible || row['自付額'] || row['額外醫療保障'] || row['Deductible '])?.toString().toLowerCase().trim();
                     let matchDeductible = false;
                     if (rawDed) {
@@ -400,7 +410,6 @@
                                         (deductible === 'super_high' && (rawDed.includes('特級') || rawDed.includes('super')));
                     }
 
-                    // 4. 比對性別 (Gender / 性別 / Sex)
                     let matchGender = true;
                     const rawGender = (row.Gender || row['性別'] || row['Sex'])?.toString().toLowerCase().trim();
                     if (rawGender) {
@@ -414,7 +423,7 @@
 
                 if (record) {
                     const premKey = Object.keys(record).find(k => 
-                        k.toLowerCase().includes('premium') || k.includes('保費') || k.includes('Premium')
+                        k.toLowerCase().includes('premium') || k.includes('保費')
                     );
                     if (premKey && record[premKey] !== undefined) {
                         return parseFloat(record[premKey]);
@@ -422,7 +431,6 @@
                 }
             }
 
-            // 備用演算法 (若 Excel 尚未對應到該筆記錄)
             let base = 3500;
             if (age < 20) base = 2000 + age * 80;
             else if (age < 50) base = 3000 + (age - 20) * 350;
@@ -458,9 +466,9 @@
                 deductibleTitle.innerText = "自付額選項 (Deductible)";
 
                 const levels = [
-                    { label: '智選計劃 (Smart)', value: 'smart' },
-                    { label: '精選計劃 (Advance)', value: 'advance' },
-                    { label: '優選計劃 (Deluxe)', value: 'deluxe' }
+                    { label: '智選 (Smart)', value: 'smart' },
+                    { label: '精選 (Advance)', value: 'advance' },
+                    { label: '優選 (Deluxe)', value: 'deluxe' }
                 ];
 
                 planContainer.innerHTML = levels.map(l => 
@@ -472,12 +480,12 @@
             } else if (selectedMainPlan === 'flexi') {
                 genderContainer.style.display = 'block';
                 levelTitle.innerText = "計劃級別 (Level)";
-                deductibleTitle.innerText = "額外醫療保障 (Supplementary medical benefit)";
+                deductibleTitle.innerText = "額外醫療保障 (Supplementary benefit)";
 
                 const levels = [
                     { label: '普通房 (Ward)', value: 'ward' },
-                    { label: '半私家房 (Semi-private Room)', value: 'semi-private' },
-                    { label: '私家房 (Private Room)', value: 'private' }
+                    { label: '半私家 (Semi-Private)', value: 'semi-private' },
+                    { label: '私家房 (Private)', value: 'private' }
                 ];
 
                 planContainer.innerHTML = levels.map(l => 
@@ -485,9 +493,9 @@
                 ).join('');
 
                 const deductibles = [
-                    { label: '沒有額外醫療保障', value: 'none' },
-                    { label: '連同高額醫療保障', value: 'high' },
-                    { label: '連同特級高額醫療保障', value: 'super_high' }
+                    { label: '沒有保障', value: 'none' },
+                    { label: '高額保障', value: 'high' },
+                    { label: '特級高額', value: 'super_high' }
                 ];
 
                 deductibleContainer.innerHTML = deductibles.map(d => 

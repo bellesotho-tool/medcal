@@ -190,16 +190,6 @@
     <div class="header-title">醫療融資分析計算器</div>
 
     <div class="card">
-        <!-- 資料庫連結狀態欄 (隱藏) -->
-        <div class="db-status-bar">
-            <div>
-                數據源狀態：<span id="dbStatus">未連結 Excel 數據源</span>
-            </div>
-            <div>
-                <input type="file" id="excelUpload" accept=".xlsx, .xls" multiple>
-            </div>
-        </div>
-
         <!-- 保障計劃 (Plan) 下拉選單 -->
         <span class="section-label">保障計劃 (Plan)</span>
         <select id="mainPlanSelect" class="select-input">
@@ -324,33 +314,58 @@
             flexi: null
         };
 
-        async function tryAutoLoadExcels() {
-            try {
-                const resSupreme = await fetch('supreme.xlsx');
-                if (resSupreme.ok) {
-                    const buffer = await resSupreme.arrayBuffer();
-                    databases.supreme = parseExcelBuffer(buffer);
-                    console.log("supreme.xlsx 載入成功");
+        // 強力自動載入函式（繞過快取 + 支援多種檔名路徑）
+        async function fetchExcelWithFallback(fileNames) {
+            const timestamp = new Date().getTime(); // 防止 GitHub Pages 快取
+            for (let name of fileNames) {
+                try {
+                    const res = await fetch(`${name}?v=${timestamp}`);
+                    if (res.ok) {
+                        const buffer = await res.arrayBuffer();
+                        const parsed = parseExcelBuffer(buffer);
+                        if (parsed && parsed.length > 0) {
+                            return { parsed, name };
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`嘗試載入 ${name} 失敗:`, e);
                 }
-            } catch (e) { console.log("未檢測到 supreme.xlsx"); }
+            }
+            return null;
+        }
 
-            try {
-                const resFlexi = await fetch('flexi.xlsx');
-                if (resFlexi.ok) {
-                    const buffer = await resFlexi.arrayBuffer();
-                    databases.flexi = parseExcelBuffer(buffer);
-                    console.log("flexi.xlsx 載入成功");
-                }
-            } catch (e) { console.log("未檢測到 flexi.xlsx"); }
+        async function tryAutoLoadExcels() {
+            // 嘗試載入 supreme.xlsx
+            const resSupreme = await fetchExcelWithFallback(['supreme.xlsx', 'Supreme.xlsx', './supreme.xlsx']);
+            if (resSupreme) {
+                databases.supreme = resSupreme.parsed;
+                console.log(`✅ [Supreme] 成功載入檔案: ${resSupreme.name} (共 ${resSupreme.parsed.length} 筆數據)`);
+            } else {
+                console.error("❌ [Supreme] 無法連結 supreme.xlsx");
+            }
+
+            // 嘗試載入 flexi.xlsx
+            const resFlexi = await fetchExcelWithFallback(['flexi.xlsx', 'Flexi.xlsx', './flexi.xlsx']);
+            if (resFlexi) {
+                databases.flexi = resFlexi.parsed;
+                console.log(`✅ [Flexi] 成功載入檔案: ${resFlexi.name} (共 ${resFlexi.parsed.length} 筆數據)`);
+            } else {
+                console.error("❌ [Flexi] 無法連結 flexi.xlsx");
+            }
 
             calculate();
         }
 
         function parseExcelBuffer(buffer) {
-            const workbook = XLSX.read(buffer, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            return XLSX.utils.sheet_to_json(worksheet);
+            try {
+                const workbook = XLSX.read(buffer, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                return XLSX.utils.sheet_to_json(worksheet);
+            } catch (err) {
+                console.error("解析 Excel 發生錯誤:", err);
+                return null;
+            }
         }
 
         function calculatePremium(age, mainPlan, gender, level, deductible) {
@@ -358,45 +373,56 @@
 
             if (activeDb && activeDb.length > 0) {
                 const record = activeDb.find(row => {
-                    // 1. 年齡判定
-                    const ageVal = row.Age || row['年齡'] || row['Age '];
+                    // 1. 比對年齡 (Age / 年齡)
+                    const ageVal = row.Age !== undefined ? row.Age : (row['年齡'] !== undefined ? row['年齡'] : row['Age ']);
                     const matchAge = ageVal == age;
 
-                    // 2. 計劃級別判定（支援英文與中文欄位值）
-                    const planVal = (row.Plan || row['計劃級別'] || row['Plan '])?.toString().toLowerCase();
-                    const matchPlan = planVal === level.toLowerCase() || 
-                                      (level === 'ward' && planVal?.includes('普通')) ||
-                                      (level === 'semi-private' && planVal?.includes('半私')) ||
-                                      (level === 'private' && planVal?.includes('私'));
+                    // 2. 比對計劃級別 (Plan / 計劃級別)
+                    const rawPlan = (row.Plan || row['計劃級別'] || row['計劃'] || row['Level'])?.toString().toLowerCase().trim();
+                    let matchPlan = false;
+                    if (rawPlan) {
+                        matchPlan = rawPlan === level.toLowerCase() || 
+                                  (level === 'ward' && (rawPlan.includes('ward') || rawPlan.includes('普通'))) ||
+                                  (level === 'semi-private' && (rawPlan.includes('semi') || rawPlan.includes('半私'))) ||
+                                  (level === 'private' && (rawPlan.includes('private') || rawPlan.includes('私家'))) ||
+                                  (level === 'smart' && rawPlan.includes('smart')) ||
+                                  (level === 'advance' && rawPlan.includes('advance')) ||
+                                  (level === 'deluxe' && rawPlan.includes('deluxe'));
+                    }
 
-                    // 3. 自付額/額外保障判定
-                    const dedVal = (row.Deductible || row['自付額'] || row['額外醫療保障'])?.toString().toLowerCase();
-                    const matchDeductible = dedVal === deductible.toString().toLowerCase() ||
-                                            (deductible === 'none' && (dedVal?.includes('沒有') || dedVal === '0')) ||
-                                            (deductible === 'high' && dedVal?.includes('高額')) ||
-                                            (deductible === 'super_high' && dedVal?.includes('特級'));
+                    // 3. 比對自付額 / 額外保障 (Deductible / 自付額 / 額外醫療保障)
+                    const rawDed = (row.Deductible || row['自付額'] || row['額外醫療保障'] || row['Deductible '])?.toString().toLowerCase().trim();
+                    let matchDeductible = false;
+                    if (rawDed) {
+                        matchDeductible = rawDed === deductible.toString().toLowerCase() ||
+                                        (deductible === 'none' && (rawDed.includes('沒有') || rawDed.includes('none') || rawDed === '0')) ||
+                                        (deductible === 'high' && (rawDed.includes('高額') || rawDed.includes('high'))) ||
+                                        (deductible === 'super_high' && (rawDed.includes('特級') || rawDed.includes('super')));
+                    }
 
-                    // 4. 性別判定 (僅全護航或含 Gender 欄位時比對)
+                    // 4. 比對性別 (Gender / 性別 / Sex)
                     let matchGender = true;
-                    const genderVal = (row.Gender || row['性別'] || row['Sex'])?.toString().toLowerCase();
-                    if (genderVal) {
-                        matchGender = (genderVal === gender.toLowerCase()) || 
-                                      (gender === 'male' && (genderVal.includes('男') || genderVal.startsWith('m'))) || 
-                                      (gender === 'female' && (genderVal.includes('女') || genderVal.startsWith('f')));
+                    const rawGender = (row.Gender || row['性別'] || row['Sex'])?.toString().toLowerCase().trim();
+                    if (rawGender) {
+                        matchGender = (rawGender === gender.toLowerCase()) || 
+                                      (gender === 'male' && (rawGender.includes('男') || rawGender.startsWith('m'))) || 
+                                      (gender === 'female' && (rawGender.includes('女') || rawGender.startsWith('f')));
                     }
 
                     return matchAge && matchPlan && matchDeductible && matchGender;
                 });
 
                 if (record) {
-                    const premKey = Object.keys(record).find(k => k.toLowerCase().includes('premium') || k.includes('保費'));
-                    if (premKey && record[premKey]) {
+                    const premKey = Object.keys(record).find(k => 
+                        k.toLowerCase().includes('premium') || k.includes('保費') || k.includes('Premium')
+                    );
+                    if (premKey && record[premKey] !== undefined) {
                         return parseFloat(record[premKey]);
                     }
                 }
             }
 
-            // 備用演算法 (當數據庫未連結時備用)
+            // 備用演算法 (若 Excel 尚未對應到該筆記錄)
             let base = 3500;
             if (age < 20) base = 2000 + age * 80;
             else if (age < 50) base = 3000 + (age - 20) * 350;
